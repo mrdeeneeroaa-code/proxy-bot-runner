@@ -1,0 +1,53 @@
+name: Run ProxySpeed bot check
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: proxy-bot-run
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone private bot repo
+        run: |
+          git clone --depth 1 https://x-access-token:${{ secrets.PRIVATE_REPO_TOKEN }}@github.com/mrdeeneeroaa-code/proxy.git bot-src
+          cd bot-src
+          git config user.name "proxy-bot-runner"
+          git config user.email "actions@users.noreply.github.com"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: bot-src
+        run: pip install -r requirements.txt
+
+      - name: Run bot check once
+        working-directory: bot-src
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          ADMIN_ID: ${{ secrets.ADMIN_ID }}
+          PROXYUNIVERSE_API_KEY: ${{ secrets.PROXYUNIVERSE_API_KEY }}
+          USDT_BEP20_ADDRESS: ${{ secrets.USDT_BEP20_ADDRESS }}
+        run: python run_once.py
+
+      - name: Save state back to private repo
+        working-directory: bot-src
+        run: |
+          git add -f orders.json events.json user_prefs.json state.json 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "state update [skip ci]"
+            git push
+          else
+            echo "No state changes."
+          fi
